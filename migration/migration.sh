@@ -17,7 +17,9 @@ mongodump "mongodb+srv://$SOURCE_MONGO_CLUSTER" \
   --excludeCollection=cards_13e5a329-52e8-45bd-9887-537753adbeee \
   --excludeCollection=loyalty_members \
   --excludeCollection=loyalty_transactions \
-  --excludeCollection=events_history
+  --excludeCollection=events_history \
+  --excludeCollection=flowsobjectsnumbers \
+  --excludeCollection=sequences
 
 # 2. restore db to target
 mongorestore "mongodb+srv://$TARGET_MONGO_CLUSTER" \
