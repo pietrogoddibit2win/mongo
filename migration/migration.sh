@@ -8,9 +8,8 @@ mongodump "mongodb+srv://$SOURCE_MONGO_CLUSTER" \
   --username=$SOURCE_USERNAME \
   --password=$SOURCE_PASSWORD \
   --db=$SOURCE_DB \
-  --out=./dump \
-  --excludeCollection=sessions
-# \
+  --out=./dump
+# --excludeCollection=sessions \
 # --excludeCollection=accounts \
 # --excludeCollection=orders \
 # --excludeCollection=orderitems \
