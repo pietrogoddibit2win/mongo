@@ -19,20 +19,14 @@ source $SCRIPT_DIR/.env
 # export CLUSTER_NAME="{{ inputs.mongo_cluster }}"
 # export NAMESPACE="{{ inputs.namespace }}"
 # export NEW_USERNAME="{{ inputs._username }}"
-# export NEW_PASSWORD="{{ inputs._password }}"
-# export NEW_DATABASE="{{ inputs.namespace }}-db"
 # export NEW_USERNAME_READ_ONLY="{{ inputs._username_ro }}"
-# export NEW_PASSWORD_READ_ONLY="{{ inputs._password_ro }}"
 # # retrieve private and public key used in mongo api
 # export PRIVATE_KEY=$(echo "$secret_mongo" | jq -r '.default.private_api_key')
 # export PUBLIC_KEY=$(echo "$secret_mongo" | jq -r '.default.public_api_key')
 
 ######################## just for local test
 export NEW_USERNAME="user-$NAMESPACE"
-export NEW_PASSWORD="testingpassword"
-export NEW_DATABASE="$NAMESPACE-db"
 export NEW_USERNAME_READ_ONLY="user-$NAMESPACE-ro"
-export NEW_PASSWORD_READ_ONLY="testingpassword-ro"
 ######################## just for local test
 
 ###### FUNCTIONS ######
@@ -88,51 +82,21 @@ check_status_code() {
   fi
 }
 # cretae user on mongo and create GCP secret
-create_user() {
+delete_user() {
   local username=$1
-  local password=$2
-  local database=$3
-  local policy=$4
-  local connection_url=$5
-
-  # create user request body
-  request_body='{
-      "username": "'"$username"'",
-      "password": "'"$password"'",
-      "databaseName": "admin",
-      "roles": [
-        {
-          "databaseName": "'"$database"'",
-          "roleName": "'"$policy"'"
-        }
-      ]
-    }'
-  user_response=$(curl_request "POST" "https://cloud.mongodb.com/api/atlas/v2/groups/${PROJECT_ID}/databaseUsers" "$request_body")
+  user_response=$(curl_request "DELETE" "https://cloud.mongodb.com/api/atlas/v2/groups/${PROJECT_ID}/databaseUsers/admin/${username}")
   # Check the status code and exit on failure
   http_code=$(echo "$user_response" | head -n 1)
   # Capture the body from the function output
   USERS=$(echo "$user_response" | tail -n +2)
-  check_status_code "$http_code" "$USERS"
-
-  # Save secret on GCP secret manager
-  USER='{
-        "username": "'"$username"'",
-        "password": "'"$password"'",
-        "database": "'"$database"'",
-        "url": "'"$connection_url"'"
-    }'
-  echo "$USER"
+  check_status_code "$http_code" "$USERS" "true"
 
   # secret_user_name="$SECRET_MONGO_NAME-$database"
   # secret_user=$(read_secret $secret_user_name)
-  # if [[ "$secret_user" == "" ]]; then
-  #   echo "creating secret '$secret_user_name'"
-  #   temp_file=$(mktemp)
-  #   echo -n "$USER" >$temp_file
-  #   secret_user=$(cat $temp_file)
-  #   create_secret_fromfile $secret_user_name 'project={{ inputs.project }}, namespace={{ inputs.namespace }}' $temp_file
+  # if [ -n "$secret_user" ]; then
+  #   echo "deleting secret '$secret_user_name'"
+  #   gcloud secrets delete $secret_user_name --project={{ inputs.master_project }} --quiet
   # fi
-  # echo "secret '$secret_user_name': $secret_user"
 }
 
 ############ EXECUTION ############
@@ -151,33 +115,13 @@ project=$(echo "$projects" | jq -r --arg project_name "$PROJECT_NAME" '.results[
 export PROJECT_ID=$(echo "$project" | jq -r '.id')
 if [ -n "$PROJECT_ID" ]; then
   echo "Project $PROJECT_NAME found with id $PROJECT_ID"
-  # Make the API request to retrieve cluster information
-  clusters_response=$(curl_request "GET" "https://cloud.mongodb.com/api/atlas/v2/groups/${PROJECT_ID}/clusters")
-  # Check the status code and exit on failure
-  http_code=$(echo "$clusters_response" | head -n 1)
-  # Capture the body from the function output
-  clusters=$(echo "$clusters_response" | tail -n +2)
-  check_status_code "$http_code" "$clusters"
-
-  # Filter the response to find the cluster by name
-  cluster=$(echo $clusters | jq -r --arg cluster_name "$CLUSTER_NAME" '.results[] | select(.name == $cluster_name)')
-  # get connection url from cluster
-  connection_url=$(echo $cluster | jq -r '.connectionStrings.standardSrv')
-  # define a variable with mongo srv prefix
-  mongo_srv_prefix=mongodb+srv://
-  # extract host from connection url
-  host=$(echo "${connection_url/${mongo_srv_prefix}/""}")
 
   ############ USER ############
   new_username=$NEW_USERNAME
-  new_password=$NEW_PASSWORD
-  policy="readWrite"
-  create_user "$new_username" "$new_password" "$NEW_DATABASE" "$policy" "$mongo_srv_prefix$new_username:$new_password@$host/$NEW_DATABASE"
+  delete_user "$new_username"
   ############ READ ONLY USER ############
   new_username_read_only=$NEW_USERNAME_READ_ONLY
-  new_password_read_only=$NEW_PASSWORD_READ_ONLY
-  policy_read_only="read"
-  create_user "$new_username_read_only" "$new_password_read_only" "$NEW_DATABASE" "$policy_read_only" "$mongo_srv_prefix$new_username_read_only:$new_password_read_only@$host/$NEW_DATABASE"
+  delete_user "$new_username_read_only"
 else
   echo "project with name '$PROJECT_NAME' does not exists!"
 fi
